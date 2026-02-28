@@ -1,4 +1,5 @@
 import { useState, useEffect } from "react";
+import Chatbot from "./components/Chatbot";
 
 // ─── MOCK DATA & STATE ENGINE ────────────────────────────────────────────────
 const API_URL = import.meta.env.VITE_API_URL || "http://localhost:3001";
@@ -863,6 +864,7 @@ export default function App() {
           </>
         )}
       </main>
+      <Chatbot />
     </div>
   );
 }
