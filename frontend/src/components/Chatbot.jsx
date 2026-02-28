@@ -1,4 +1,4 @@
-import { useMemo, useState } from "react";
+﻿import { useMemo, useState } from "react";
 
 const API_BASE = import.meta.env.VITE_API_URL || "http://localhost:3001";
 
@@ -115,7 +115,11 @@ export default function Chatbot() {
   const [messages, setMessages] = useState([{ role: "assistant", text: welcomeMessage }]);
 
   const conversationHistory = useMemo(
-    () => messages.map((m) => ({ role: m.role === "assistant" ? "assistant" : "user", content: m.text })),
+    () =>
+      messages.map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.text }],
+      })),
     [messages]
   );
 
@@ -123,7 +127,7 @@ export default function Chatbot() {
     const text = input.trim();
     if (!text || isTyping) return;
 
-    const nextHistory = [...conversationHistory, { role: "user", content: text }];
+    const nextHistory = [...conversationHistory, { role: "user", parts: [{ text }] }];
     setMessages((prev) => [...prev, { role: "user", text }]);
     setInput("");
     setIsTyping(true);
@@ -149,23 +153,28 @@ export default function Chatbot() {
       const producersData = JSON.stringify(producersJson);
       const centersData = JSON.stringify(centersJson);
 
-      const response = await fetch("https://api.anthropic.com/v1/messages", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          "x-api-key": import.meta.env.VITE_ANTHROPIC_API_KEY,
-          "anthropic-version": "2023-06-01",
-          "anthropic-dangerous-direct-browser-access": "true",
-        },
-        body: JSON.stringify({
-          model: "claude-opus-4-6",
-          max_tokens: 300,
-          system: `You are VoltAI, smart assistant for EnergyDAO - a decentralized renewable energy marketplace in India. Be concise, friendly, use ₹ for currency.
+      const geminiKey = import.meta.env.VITE_GEMINI_API_KEY;
+      if (!geminiKey) {
+        throw new Error("Missing VITE_GEMINI_API_KEY in frontend/.env");
+      }
+
+      const response = await fetch(
+        `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${geminiKey}`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [
+                {
+                  text: `You are VoltAI, smart assistant for EnergyDAO - a decentralized renewable energy marketplace in India. Be concise, friendly, use ₹ for currency.
 Keep all replies under 80 words.
 
 LIVE PLATFORM DATA RIGHT NOW:
 Consumers: ${consumersData}
-Producers: ${producersData}  
+Producers: ${producersData}
 Energy Centers: ${centersData}
 
 You help with:
@@ -174,16 +183,26 @@ You help with:
 - Energy center storage and transfers
 - How the decentralized marketplace works
 - Recommending cheapest energy sources`,
-          messages: nextHistory,
-        }),
-      });
+                },
+              ],
+            },
+            contents: nextHistory,
+            generationConfig: {
+              maxOutputTokens: 300,
+            },
+          }),
+        }
+      );
 
       const data = await response.json();
       if (!response.ok) {
         throw new Error(data?.error?.message || data?.error || "VoltAI request failed");
       }
 
-      const reply = data?.content?.[0]?.text || "I could not generate a response right now.";
+      const reply =
+        data?.candidates?.[0]?.content?.parts?.map((p) => p.text).filter(Boolean).join("\n") ||
+        "I could not generate a response right now.";
+
       setMessages((prev) => [...prev, { role: "assistant", text: reply }]);
     } catch (err) {
       alert(err.message || "Failed to get VoltAI response");
